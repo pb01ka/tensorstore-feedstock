@@ -34,22 +34,25 @@ source:
     # loads rules_cc's own cc_common reimplementation, nor Bazel's own
     # local_config_cc autoconfiguration. Windows has no such flag (see
     # build.bat) and relies on local_config_cc instead, which goes through
-    # rules_cc more heavily than plain cc_library/cc_binary usage does.
-    # tensorstore's normal pin (0.2.19) breaks this two different ways: (1)
-    # cc_library/cc_binary/etc are pure Starlark rules built on
-    # cc_common.internal_DO_NOT_USE(), which on this Bazel build comes back
-    # missing several methods it expects (freeze, create_header_info, ...)
-    # -- open upstream as bazelbuild/rules_cc#814 and #809; (2) starting at
-    # 0.2.6, cc_toolchain.bzl (used to define local_config_cc's MSVC
-    # toolchain) unconditionally calls cc_common.escape_label(), which
-    # doesn't exist in bazelbuild/bazel at all (checked current master and
-    # this exact .bazelversion). Patch Windows onto rules_cc 0.2.3 instead:
-    # predates both problems (no references anywhere in it to cc_internal,
-    # internal_DO_NOT_USE, or escape_label), while still having the
-    # compatibility_proxy_repo() tensorstore's WORKSPACE calls unconditionally
-    # (needs a 0.2.x; 0.1.x doesn't have it) and the toolchain_config_utils.bzl
-    # helpers Bazel's own windows_cc_configure.bzl needs. See the patch
-    # itself for the full trail.
+    # rules_cc's compatibility_proxy_repo() -- a mechanism that picks
+    # between Bazel's native cc_library/cc_binary/cc_toolchain/etc (Bazel <
+    # 9) and rules_cc's own Starlark reimplementation (Bazel >= 9, which
+    # drops the native rules), by checking native.bazel_version. The Bazel
+    # binary conda builds for win-64 doesn't have that populated, and
+    # rules_cc's check (every 0.2.x release checked) defaults to "assume
+    # very new" when it's empty, so it always picks the Starlark
+    # reimplementation here regardless of actual Bazel version -- backwards
+    # from what we want, since that reimplementation depends on cc_common/
+    # cc_internal private-API surface this Bazel build doesn't have
+    # (missing methods hit so far: cc_common.internal_DO_NOT_USE(), open
+    # upstream as bazelbuild/rules_cc#814 and #809; cc_common.escape_label();
+    # cc_common.get_cc_native_library_info_provider()). The patch flips that
+    # default (unknown version -> assume old -> use native rules), which is
+    # what actually avoids this whole class of bug; rules_cc 0.2.3 is used
+    # only because it's old enough to still have a plain
+    # native.bazel_version check to patch directly (0.2.19, tensorstore's
+    # normal pin, routes the same decision through bazel_features's own
+    # version detection instead). See the patch itself for the full trail.
     - if: win
       then: patches/0010-rules_cc-pin-0.2.3-for-windows.patch
     # tensorstore's WORKSPACE registers an LLVM toolchain (via

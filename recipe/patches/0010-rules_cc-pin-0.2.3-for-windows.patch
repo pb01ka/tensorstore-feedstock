@@ -1,38 +1,71 @@
---- a/third_party/rules_cc/workspace.bzl	2026-09-12 02:38:58
-+++ b/third_party/rules_cc/workspace.bzl	2026-09-12 02:38:58
-@@ -25,9 +25,32 @@
+diff -ruN a/third_party/rules_cc/patches/native_proxy_fallback.diff b/third_party/rules_cc/patches/native_proxy_fallback.diff
+--- a/third_party/rules_cc/patches/native_proxy_fallback.diff	1970-01-01 05:30:00
++++ b/third_party/rules_cc/patches/native_proxy_fallback.diff	2026-09-12 02:51:26
+@@ -0,0 +1,11 @@
++--- a/cc/extensions.bzl	2026-09-12 02:50:48
+++++ b/cc/extensions.bzl	2026-09-12 02:50:48
++@@ -28,7 +28,7 @@
++ 
++ def _compatibility_proxy_repo_impl(rctx):
++     bazel = native.bazel_version
++-    if not bazel or bazel >= "9":
+++    if bazel and bazel >= "9":
++         rctx.file(
++             "BUILD",
++             """
+diff -ruN a/third_party/rules_cc/workspace.bzl b/third_party/rules_cc/workspace.bzl
+--- a/third_party/rules_cc/workspace.bzl	2026-09-12 02:51:26
++++ b/third_party/rules_cc/workspace.bzl	2026-09-12 02:51:26
+@@ -25,9 +25,49 @@
      maybe(
          http_archive,
          name = "rules_cc",
 -        urls = mirror_url("https://github.com/bazelbuild/rules_cc/archive/0.2.19.tar.gz"),
 -        strip_prefix = "rules_cc-0.2.19",
 -        sha256 = "351248f6be41d18694d4d7c390aaebd9f865eea72a4758b2c9d782ae744c97f4",
-+        # Pinned to rules_cc 0.2.3 on Windows. tensorstore's WORKSPACE calls
-+        # rules_cc's compatibility_proxy_repo() unconditionally (needs a
-+        # 0.2.x; 0.1.x doesn't have it) -- but tensorstore's normal pin
-+        # (0.2.19) implements cc_library/cc_binary/etc as pure Starlark
-+        # rules built on cc_common.internal_DO_NOT_USE(), and on this Bazel
-+        # build that private API comes back missing several methods it
-+        # expects (freeze, create_header_info, ...) -- an upstream
-+        # incompatibility, still open as bazelbuild/rules_cc#814 and #809.
-+        # Later 0.2.x releases (>=0.2.6) also add an unconditional
-+        # cc_common.escape_label() call in cc_toolchain.bzl, used when Bazel
-+        # auto-generates the local_config_cc Windows MSVC toolchain -- that
-+        # method doesn't exist in bazelbuild/bazel at all (checked current
-+        # master and this exact .bazelversion), so every release from 0.2.6
-+        # onward is broken here too. 0.2.3 predates both problems: no
-+        # references anywhere in it to cc_internal, internal_DO_NOT_USE, or
-+        # escape_label, while it still has compatibility_proxy_repo() and
-+        # the toolchain_config_utils.bzl helpers Bazel's own
-+        # windows_cc_configure.bzl needs. Other platforms never exercise
-+        # any of this: bazel-toolchain's --crosstool_top flag routes them
-+        # through Bazel's legacy CROSSTOOL-based toolchain resolution
-+        # instead of Bazel's own local_config_cc autoconfiguration. Windows
-+        # has no such flag (see build.bat), so it relies on
-+        # local_config_cc, and needs a rules_cc release that works with it.
++        # Pinned to rules_cc 0.2.3 on Windows, plus a small patch to its
++        # cc/extensions.bzl (see patches/native_proxy_fallback.diff).
++        #
++        # tensorstore's WORKSPACE calls rules_cc's compatibility_proxy_repo()
++        # unconditionally, which chooses between two implementations of
++        # cc_library/cc_binary/cc_toolchain/etc: Bazel's own native rules
++        # (for Bazel < 9), or rules_cc's own Starlark reimplementation (for
++        # Bazel >= 9, which drops the native rules). The Bazel binary conda
++        # builds for win-64 (unlike the official release binaries used
++        # elsewhere) doesn't have `native.bazel_version` populated, and
++        # rules_cc's version check (in every 0.2.x release checked)
++        # defaults to "assume very new" when the version is unknown, so on
++        # this platform it always picks its own Starlark reimplementation
++        # regardless of the actual Bazel version -- backwards from what we
++        # want, since that reimplementation depends on newer cc_common/
++        # cc_internal private-API surface this Bazel build doesn't have
++        # (missing methods seen so far: cc_common.internal_DO_NOT_USE()
++        # -- open upstream as bazelbuild/rules_cc#814 and #809 --
++        # cc_common.escape_label(), cc_common.get_cc_native_library_info_provider()).
++        # native_proxy_fallback.diff flips the default the other way
++        # (unknown version -> assume old -> use Bazel's native rules),
++        # which is what actually avoids this whole class of bug. rules_cc
++        # 0.2.3 is used only because it's a release old enough to still
++        # have a plain `native.bazel_version` string check to patch (0.2.19
++        # -- tensorstore's normal pin -- routes the same decision through
++        # bazel_features's own version detection instead, which has the
++        # same "unknown version" defect but is a separate dependency, so
++        # harder to patch directly); it otherwise makes no difference here,
++        # since with this patch cc_library/cc_binary/cc_toolchain always
++        # resolve to Bazel's native rules regardless of rules_cc version.
++        # Other platforms never exercise any of this: bazel-toolchain's
++        # --crosstool_top flag routes them through Bazel's legacy
++        # CROSSTOOL-based toolchain resolution instead of Bazel's own
++        # local_config_cc autoconfiguration, which is what actually goes
++        # through rules_cc's compatibility_proxy_repo() machinery. Windows
++        # has no such flag (see build.bat), so it relies on local_config_cc.
 +        urls = mirror_url("https://github.com/bazelbuild/rules_cc/archive/0.2.3.tar.gz"),
 +        strip_prefix = "rules_cc-0.2.3",
 +        sha256 = "88661aba2ad049ae0be36eca8222c1911a397c077776aba8efa42b737eaa3152",
++        patches = [
++            Label("//third_party:rules_cc/patches/native_proxy_fallback.diff"),
++        ],
++        patch_args = ["-p1"],
          repo_mapping = {
              "@protobuf": "@com_google_protobuf",
          },
