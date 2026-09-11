@@ -37,12 +37,15 @@ source:
     # cc_common.internal_DO_NOT_USE() and gets back a struct missing several
     # methods it expects (freeze, create_header_info, ...) -- an upstream
     # incompatibility, still open as bazelbuild/rules_cc#814 and #809. Patch
-    # Windows onto rules_cc 0.1.1 instead, matching this .bazelversion of
-    # Bazel: 0.1.1 predates rules_cc's Starlark rewrite of cc_library/etc,
-    # so its rules just wrap Bazel's native cc_* rules and never touch that
-    # private API at all.
+    # Windows onto rules_cc 0.2.10 instead: tensorstore's WORKSPACE calls
+    # rules_cc's compatibility_proxy_repo() unconditionally (needs a 0.2.x),
+    # and 0.2.10 predates the cc_internal-based rewrite entirely (its
+    # compatibility_proxy_repo() picks plain native.cc_library() et al. on
+    # any Bazel below 9.0.0-pre) while still providing the
+    # toolchain_config_utils.bzl helpers Bazel's own windows_cc_configure.bzl
+    # needs. See the patch itself for the full trail.
     - if: win
-      then: patches/0010-rules_cc-pin-0.1.1-for-windows.patch
+      then: patches/0010-rules_cc-pin-0.2.10-for-windows.patch
     # tensorstore's WORKSPACE registers an LLVM toolchain (via
     # toolchains_llvm) purely to extract C++ API docs -- not needed to build
     # the Python extension. toolchains_llvm has no prebuilt LLVM distribution
