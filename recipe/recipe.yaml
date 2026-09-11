@@ -53,7 +53,10 @@ source:
       then: patches/0011-windows-skip-llvm-docs-toolchain.patch
 build:
   number: 2
-  skip: match(python, "<3.11")
+  # TEMPORARY: only build win-64 while its Bazel/rules_cc issues are being
+  # ironed out, to avoid burning CI time on the other (already working)
+  # platforms. Remove the "(not win) or" part once done.
+  skip: (not win) or match(python, "<3.11")
 
 requirements:
   build:
