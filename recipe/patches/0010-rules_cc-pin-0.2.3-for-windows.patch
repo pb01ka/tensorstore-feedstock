@@ -1,0 +1,38 @@
+--- a/third_party/rules_cc/workspace.bzl	2026-09-12 02:38:58
++++ b/third_party/rules_cc/workspace.bzl	2026-09-12 02:38:58
+@@ -25,9 +25,32 @@
+     maybe(
+         http_archive,
+         name = "rules_cc",
+-        urls = mirror_url("https://github.com/bazelbuild/rules_cc/archive/0.2.19.tar.gz"),
+-        strip_prefix = "rules_cc-0.2.19",
+-        sha256 = "351248f6be41d18694d4d7c390aaebd9f865eea72a4758b2c9d782ae744c97f4",
++        # Pinned to rules_cc 0.2.3 on Windows. tensorstore's WORKSPACE calls
++        # rules_cc's compatibility_proxy_repo() unconditionally (needs a
++        # 0.2.x; 0.1.x doesn't have it) -- but tensorstore's normal pin
++        # (0.2.19) implements cc_library/cc_binary/etc as pure Starlark
++        # rules built on cc_common.internal_DO_NOT_USE(), and on this Bazel
++        # build that private API comes back missing several methods it
++        # expects (freeze, create_header_info, ...) -- an upstream
++        # incompatibility, still open as bazelbuild/rules_cc#814 and #809.
++        # Later 0.2.x releases (>=0.2.6) also add an unconditional
++        # cc_common.escape_label() call in cc_toolchain.bzl, used when Bazel
++        # auto-generates the local_config_cc Windows MSVC toolchain -- that
++        # method doesn't exist in bazelbuild/bazel at all (checked current
++        # master and this exact .bazelversion), so every release from 0.2.6
++        # onward is broken here too. 0.2.3 predates both problems: no
++        # references anywhere in it to cc_internal, internal_DO_NOT_USE, or
++        # escape_label, while it still has compatibility_proxy_repo() and
++        # the toolchain_config_utils.bzl helpers Bazel's own
++        # windows_cc_configure.bzl needs. Other platforms never exercise
++        # any of this: bazel-toolchain's --crosstool_top flag routes them
++        # through Bazel's legacy CROSSTOOL-based toolchain resolution
++        # instead of Bazel's own local_config_cc autoconfiguration. Windows
++        # has no such flag (see build.bat), so it relies on
++        # local_config_cc, and needs a rules_cc release that works with it.
++        urls = mirror_url("https://github.com/bazelbuild/rules_cc/archive/0.2.3.tar.gz"),
++        strip_prefix = "rules_cc-0.2.3",
++        sha256 = "88661aba2ad049ae0be36eca8222c1911a397c077776aba8efa42b737eaa3152",
+         repo_mapping = {
+             "@protobuf": "@com_google_protobuf",
+         },
